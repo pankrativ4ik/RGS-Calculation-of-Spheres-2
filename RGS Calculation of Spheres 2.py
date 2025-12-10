@@ -4,6 +4,7 @@ import yaml
 import json
 import matplotlib.pyplot as plt
 
+
 class SphereRCS:
     def __init__(self, diameter: float):
         self.diameter = float(diameter)
@@ -22,7 +23,7 @@ class SphereRCS:
         if n_max < 10:
             n_max = 10
 
-        total_sum = 0.0
+        total_sum = 0.0 + 0.0j
 
         for n in range(1, n_max + 1):
             jn_ka = sp.spherical_jn(n, ka)
@@ -36,13 +37,14 @@ class SphereRCS:
             an = jn_ka / hn_ka
             bn = (ka * jn_ka_prime) / (ka * hn_ka_prime)
 
-            term = (-1) ** n * (n + 0.5) * (bn - an)
+            term = (-1)**n * (n + 0.5) * (bn - an)
             total_sum += term
 
         wavelength = c / float(frequency)
-        rcs = (wavelength ** 2 / np.pi) * np.abs(total_sum) ** 2
+        rcs = (wavelength ** 2 / np.pi) * np.abs(total_sum)**2
 
         return rcs
+
 
 class ResultWriter:
     @staticmethod
@@ -61,23 +63,20 @@ class ResultWriter:
 
         print(f"Результаты сохранены в файл: {filename}")
 
+
 class RCSCalculator:
     def __init__(self, input_file: str = "task_rcs_02.yaml"):
         self.input_file = input_file
-        self.variants = []
+        self.variants = {}
         self.load_variants()
 
     def load_variants(self):
         try:
             with open(self.input_file, 'r', encoding='utf-8') as f:
                 data = yaml.safe_load(f)
-                self.variants = data['data']
 
-            for variant_data in self.variants:
-                variant = variant_data['variant']
-                variant['D'] = float(variant['D'])
-                variant['fmin'] = float(variant['fmin'])
-                variant['fmax'] = float(variant['fmax'])
+            # ВОТ ТУТ ГЛАВНОЕ ИЗМЕНЕНИЕ
+            self.variants = data["data"]
 
             print(f"Успешно загружено {len(self.variants)} вариантов из файла {self.input_file}")
 
@@ -89,23 +88,19 @@ class RCSCalculator:
         print("\nДоступные варианты:")
         print("№\tДиаметр (м)\t\tfmin (Гц)\t\tfmax (Гц)")
         print("-" * 70)
-        for variant_data in self.variants:
-            v = variant_data['variant']
-            print(f"{v['number']}\t{v['D']:.6f}\t\t{v['fmin']:.2e}\t\t{v['fmax']:.2e}")
+
+        for number, v in self.variants.items():
+            print(f"{number}\t{float(v['D']):.6f}\t\t{float(v['fmin']):.2e}\t\t{float(v['fmax']):.2e}")
 
     def calculate_for_variant(self, variant_number: int, num_points: int = 1000):
-        variant = None
-        for v in self.variants:
-            if v['variant']['number'] == variant_number:
-                variant = v['variant']
-                break
-
-        if variant is None:
+        if variant_number not in self.variants:
             raise ValueError(f"Вариант {variant_number} не найден")
 
-        D = variant['D']
-        fmin = variant['fmin']
-        fmax = variant['fmax']
+        variant = self.variants[variant_number]
+
+        D = float(variant['D'])
+        fmin = float(variant['fmin'])
+        fmax = float(variant['fmax'])
 
         print(f"\nРасчет для варианта {variant_number}:")
         print(f"Диаметр сферы: {D} м")
@@ -114,76 +109,52 @@ class RCSCalculator:
 
         sphere = SphereRCS(D)
         frequencies = np.logspace(np.log10(fmin), np.log10(fmax), num_points)
+
         rcs_values = []
-        for i, freq in enumerate(frequencies):
-            rcs = sphere.calculate_rcs(freq)
-            rcs_values.append(rcs)
+        for freq in frequencies:
+            rcs_values.append(sphere.calculate_rcs(freq))
 
         return frequencies, rcs_values, variant
 
-    def plot_results(self, frequencies: list, rcs_values: list, variant: dict):
+    def plot_results(self, frequencies: list, rcs_values: list, variant_number: int):
+        variant = self.variants[variant_number]
+
         plt.figure(figsize=(12, 8))
         plt.semilogx(frequencies, rcs_values, 'b-', linewidth=2)
         plt.xlabel('Частота, Гц', fontsize=12)
         plt.ylabel('ЭПР, м²', fontsize=12)
         plt.title(f'ЭПР идеально проводящей сферы (D = {variant["D"]} м)', fontsize=14)
         plt.grid(True, which="both", ls="-", alpha=0.2)
-        plt.figtext(0.02, 0.02,
-                    f'Диапазон частот: {variant["fmin"]:.2e} - {variant["fmax"]:.2e} Гц\n'
-                    f'Диаметр сферы: {variant["D"]} м',
-                    fontsize=10, bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8))
         plt.tight_layout()
-        plt.savefig(f'sphere_rcs_variant_{variant["number"]}.png', dpi=300, bbox_inches='tight')
+
+        filename = f"sphere_rcs_variant_{variant_number}.png"
+        plt.savefig(filename, dpi=300)
         plt.show()
 
-    def save_results(self, frequencies: list, rcs_values: list, variant_number: int):
+        print(f"График сохранён как {filename}")
+
+    def save_results(self, frequencies, rcs_values, variant_number):
         filename = f"rcs_results_variant_{variant_number}.json"
         ResultWriter.write_json_format3(frequencies, rcs_values, filename)
         return filename
+
 
 def main():
     try:
         calculator = RCSCalculator("task_rcs_02.yaml")
         calculator.print_available_variants()
 
-        try:
-            variant_number = int(input("\nВведите номер варианта для расчета: "))
-        except ValueError:
-            print("Ошибка: введите целое число")
-            return
-
-        variant_exists = any(v['variant']['number'] == variant_number for v in calculator.variants)
-        if not variant_exists:
-            print(f"Ошибка: вариант {variant_number} не найден в файле")
-            return
+        variant_number = int(input("\nВведите номер варианта для расчета: "))
 
         frequencies, rcs_values, variant = calculator.calculate_for_variant(variant_number, num_points=500)
-        calculator.plot_results(frequencies, rcs_values, variant)
-        output_file = calculator.save_results(frequencies, rcs_values, variant_number)
+        calculator.plot_results(frequencies, rcs_values, variant_number)
+        output = calculator.save_results(frequencies, rcs_values, variant_number)
 
-        print(f"\nРезультаты для варианта {variant_number}:")
-        print(f"Диаметр сферы: {variant['D']} м")
-        print(f"Диапазон частот: {variant['fmin']:.2e} - {variant['fmax']:.2e} Гц")
-        print(f"Количество точек расчета: {len(frequencies)}")
-        print(f"Минимальное значение ЭПР: {min(rcs_values):.2e} м²")
-        print(f"Максимальное значение ЭПР: {max(rcs_values):.2e} м²")
-        print(f"Файл с результатами: {output_file}")
+        print("\nГотово!")
 
-        print("\nПервые 5 строк результатов из JSON файла:")
-        with open(output_file, 'r') as f:
-            data = json.load(f)
-            for i in range(min(5, len(data['freq']))):
-                print(f"Частота: {data['freq'][i]:.6e} Гц, "
-                      f"Длина волны: {data['lambda'][i]:.6e} м, "
-                      f"ЭПР: {data['rcs'][i]:.6e} м²")
-
-        print(f"\nРасчет завершен для варианта {variant_number}")
-
-    except FileNotFoundError:
-        print("Ошибка: файл task_rcs_02.yaml не найден")
-        print("Убедитесь, что файл находится в той же папке, что и скрипт")
     except Exception as e:
         print(f"Ошибка: {e}")
+
 
 if __name__ == "__main__":
     main()
