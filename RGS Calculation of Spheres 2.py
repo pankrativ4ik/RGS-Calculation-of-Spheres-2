@@ -184,7 +184,7 @@ def main():
 
     # построить график
     plt.figure(figsize=(8, 5))
-    plt.semilogy(freqs / 1e9, rcs)  # частота в ГГц
+    plt.plot(freqs / 1e9, rcs)  # частота в ГГц
     plt.xlabel("Частота, ГГц")  # ось X
     plt.ylabel("RCS, м²")
     plt.title(f"RCS vs Frequency — variant {variant_num}, D={D} m")
@@ -196,3 +196,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
